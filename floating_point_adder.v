@@ -30,7 +30,12 @@ module floating_point_adder (
     wire a_larger = (exp_a > exp_b);
     wire [7:0] effective_exp = a_larger ? exp_a : exp_b;
 
-    assign exp_diff = a_larger ? exp_a - exp_b : exp_b - exp_a;
+    diff_24bit exp_diff_calculator (
+        .a(a_larger ? exp_a : exp_b),
+        .b(a_larger ? exp_b : exp_a),
+        .diff(exp_diff)
+    );
+
     assign mant_a_shifted = a_larger ? mant_a : (mant_a >> exp_diff);
     assign mant_b_shifted = a_larger ? (mant_b >> exp_diff) : mant_b;
 
@@ -65,13 +70,25 @@ module floating_point_adder (
     reg [22:0] mant_result_normalized;
 
     // --- 5. Нормализуем результат ---
+    wire [7:0] incremented_exp;
+    wire carry_out_exp_add;
+
+    bitwise_adder_24bit exp_increment_adder (
+        .a(effective_exp),
+        .b(8'b1),  // Add 1 to exponent
+        .carry_in(1'b0),
+        .sum(incremented_exp),
+        .carry_out(carry_out_exp_add)
+    );
+
     always @(*) begin
         if (equal_magnitudes) begin
             mant_result_normalized = 23'b0;
             exp_result = 8'b0;
         end else if (mant_result_sum[24]) begin
-            mant_result_normalized = mant_result_sum[23:1];  
-            exp_result = effective_exp + 1;
+            // If overflow in mantissa, shift right and use incremented exponent
+            mant_result_normalized = mant_result_sum[23:1];  // Right shift to normalize
+            exp_result = incremented_exp;  // Use the incremented exponent from the adder
         end else begin
             mant_result_normalized = mant_result_sum[22:0];  // Keep mantissa as is
             exp_result = effective_exp;
